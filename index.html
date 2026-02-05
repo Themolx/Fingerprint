@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SUBJECT DOSSIER</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    @font-face {
+      font-family: 'Display';
+      src: local('Neue Montreal Bold'), local('NeueMontreal-Bold');
+      font-weight: bold;
+      font-style: normal;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --font: 'Display', 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      color: #fff;
+      font-family: var(--font);
+      overflow: hidden;
+      cursor: default;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #stage {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px 80px;
+    }
+
+    .line {
+      font-weight: 700;
+      line-height: 1.25;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .line.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .line.spacer {
+      height: 0.5em;
+    }
+
+    #stage.fade-out .line {
+      opacity: 0 !important;
+      transform: translateY(-4px) !important;
+      transition: opacity 0.25s ease-in, transform 0.25s ease-in;
+    }
+
+    #cursor {
+      display: inline-block;
+      width: 3px;
+      background: #fff;
+      margin-left: 8px;
+      vertical-align: baseline;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 0; }
+    }
+
+    #hint {
+      position: fixed;
+      bottom: 30px;
+      left: 80px;
+      font-size: 12px;
+      color: #333;
+      font-weight: 400;
+      font-family: var(--font);
+      transition: opacity 0.5s;
+    }
+
+    @media (max-width: 768px) {
+      #stage { padding: 40px 30px; }
+      #hint { left: 30px; bottom: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="stage"></div>
+  <div id="hint">press space to skip</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
+  <script src="shared/inference-engine.js"></script>
+  <script src="web/js/entropy.js"></script>
+  <script src="web/js/pricing.js"></script>
+
+  <script>
+  (async () => {
+    const stage = document.getElementById('stage');
+    const hint = document.getElementById('hint');
+    let skipRequested = false;
+    let currentResolve = null;
+
+    document.addEventListener('keydown', e => {
+      if (e.code === 'Space' || e.code === 'Enter') {
+        e.preventDefault();
+        skipRequested = true;
+        if (currentResolve) currentResolve();
+      }
+    });
+    document.addEventListener('click', () => {
+      skipRequested = true;
+      if (currentResolve) currentResolve();
+    });
+
+    function wait(ms) {
+      if (skipRequested) { skipRequested = false; return Promise.resolve(); }
+      return new Promise(resolve => {
+        currentResolve = resolve;
+        setTimeout(() => { currentResolve = null; resolve(); }, ms);
+      });
+    }
+
+    // ---- Fit font size to viewport ----
+    function fitSize(text, maxW, maxPx, minPx) {
+      const el = document.createElement('span');
+      el.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font-family:var(--font);font-weight:700;`;
+      document.body.appendChild(el);
+      for (let s = maxPx; s >= minPx; s -= 2) {
+        el.style.fontSize = s + 'px';
+        el.textContent = text;
+        if (el.offsetWidth <= maxW) { document.body.removeChild(el); return s; }
+      }
+      document.body.removeChild(el);
+      return minPx;
+    }
+
+    // ---- Show a block of lines ----
+    async function showBlock(lines, holdMs) {
+      stage.classList.remove('fade-out');
+      stage.innerHTML = '';
+
+      const maxW = window.innerWidth - 160;
+      const isMobile = window.innerWidth < 768;
+      const maxFont = isMobile ? 60 : 120;
+      const minFont = isMobile ? 24 : 32;
+
+      const els = [];
+      for (const text of lines) {
+        const div = document.createElement('div');
+        div.classList.add('line');
+        if (text === '') {
+          div.classList.add('spacer');
+        } else {
+          const sz = fitSize(text, maxW, maxFont, minFont);
+          div.style.fontSize = sz + 'px';
+          div.textContent = text;
+        }
+        stage.appendChild(div);
+        els.push(div);
+      }
+
+      // Stagger line appearance
+      for (let i = 0; i < els.length; i++) {
+        await wait(skipRequested ? 30 : 180);
+        els[i].classList.add('visible');
+      }
+
+      // Add cursor after last visible text line
+      const lastText = els.filter(e => !e.classList.contains('spacer')).pop();
+      if (lastText) {
+        const cursor = document.createElement('span');
+        cursor.id = 'cursor';
+        cursor.style.height = (parseInt(lastText.style.fontSize) * 0.8) + 'px';
+        lastText.appendChild(cursor);
+      }
+
+      // Hold
+      await wait(skipRequested ? 200 : holdMs);
+
+      // Fade out
+      stage.classList.add('fade-out');
+      await wait(skipRequested ? 100 : 300);
+    }
+
+    // ---- Collect fingerprint data ----
+    async function collectData() {
+      const basic = {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+        languages: Array.from(navigator.languages || []),
+        cookieEnabled: navigator.cookieEnabled,
+        hardwareConcurrency: navigator.hardwareConcurrency,
+        deviceMemory: navigator.deviceMemory,
+        screenWidth: screen.width,
+        screenHeight: screen.height,
+        screenAvailWidth: screen.availWidth,
+        screenAvailHeight: screen.availHeight,
+        colorDepth: screen.colorDepth,
+        pixelDepth: screen.pixelDepth,
+        devicePixelRatio: window.devicePixelRatio,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        timezoneOffset: new Date().getTimezoneOffset(),
+        maxTouchPoints: navigator.maxTouchPoints || 0,
+        pdfViewerEnabled: navigator.pdfViewerEnabled,
+        webdriver: navigator.webdriver || false,
+      };
+
+      // Connection
+      const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      if (conn) {
+        basic.connectionType = conn.effectiveType;
+        basic.connectionDownlink = conn.downlink;
+        basic.connectionRtt = conn.rtt;
+        basic.connectionSaveData = conn.saveData;
+      }
+
+      // DNT
+      basic.doNotTrack = navigator.doNotTrack;
+
+      // Battery
+      let battery = null;
+      try {
+        const b = await navigator.getBattery();
+        battery = {
+          charging: b.charging,
+          level: b.level,
+          chargingTime: b.chargingTime,
+          dischargingTime: b.dischargingTime,
+        };
+      } catch(e) {}
+
+      // Media devices
+      let mediaDevices = { audioinput: 0, audiooutput: 0, videoinput: 0 };
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        for (const d of devices) {
+          if (mediaDevices[d.kind] !== undefined) mediaDevices[d.kind]++;
+        }
+      } catch(e) {}
+
+      // WebGL
+      let webgl = {};
+      try {
+        const c = document.createElement('canvas');
+        const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+        if (gl) {
+          const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+          webgl.vendor = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
+          webgl.renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+          webgl.version = gl.getParameter(gl.VERSION);
+        }
+      } catch(e) {}
+
+      // FingerprintJS
+      let advanced = {};
+      try {
+        const fp = await FingerprintJS.load();
+        const result = await fp.get();
+        advanced.visitorId = result.visitorId;
+        advanced.confidence = result.confidence?.score;
+        advanced.components = result.components;
+      } catch(e) {}
+
+      // Fonts from FingerprintJS
+      let fonts = [];
+      if (advanced.components?.fonts?.value) {
+        fonts = advanced.components.fonts.value;
+      }
+
+      // Canvas hash
+      let canvas = null;
+      try {
+        const c = document.createElement('canvas');
+        c.width = 200; c.height = 50;
+        const ctx = c.getContext('2d');
+        ctx.textBaseline = 'top';
+        ctx.font = '14px Arial';
+        ctx.fillText('fingerprint', 2, 2);
+        canvas = c.toDataURL().slice(0, 100);
+      } catch(e) {}
+
+      // Audio fingerprint
+      let audio = null;
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const analyser = ctx.createAnalyser();
+        const gain = ctx.createGain();
+        const processor = ctx.createScriptProcessor(4096, 1, 1);
+        gain.gain.value = 0;
+        osc.type = 'triangle';
+        osc.connect(analyser);
+        analyser.connect(processor);
+        processor.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(0);
+        const data = new Float32Array(analyser.fftSize);
+        analyser.getFloatFrequencyData(data);
+        audio = data.slice(0, 10).reduce((a, b) => a + Math.abs(b), 0).toFixed(4);
+        osc.stop();
+        ctx.close();
+      } catch(e) {}
+
+      return {
+        basic,
+        advanced,
+        webgl,
+        canvas,
+        audio,
+        fonts,
+        battery,
+        mediaDevices,
+        collectedAt: new Date().toISOString(),
+      };
+    }
+
+    // ---- Build monolog from data ----
+    function buildMonolog(fpData, profile, entropy, uniqueness, pricing) {
+      const d = fpData.basic || {};
+      const gpu = fpData.webgl?.renderer || '';
+      const fonts = fpData.fonts || [];
+      const battery = fpData.battery || {};
+      const media = fpData.mediaDevices || {};
+
+      const osStr = profile.device.parsed.os + ' ' + profile.device.parsed.osVersion;
+      const browserStr = profile.device.parsed.browser + ' ' + profile.device.parsed.browserVersion;
+      const chipMatch = gpu.match(/Apple (M\d+\s*\w*)/i);
+      const chip = chipMatch ? chipMatch[1] : '';
+      const nvidiaMatch = gpu.match(/((?:RTX|GTX)\s*\d+\s*\w*)/i);
+      const nvidia = nvidiaMatch ? nvidiaMatch[1] : '';
+      const loc = profile.location;
+      const inc = profile.income;
+
+      // Time analysis
+      let localHour = null;
+      const now = new Date();
+      if (d.timezoneOffset !== undefined) {
+        const local = new Date(now.getTime() - d.timezoneOffset * 60000);
+        localHour = local.getUTCHours();
+      }
+
+      const designFonts = fonts.filter(f => ['Futura', 'Avenir', 'Avenir Next', 'Gill Sans', 'Helvetica Neue', 'Open Sans', 'Proxima Nova'].includes(f));
+      const devFonts = fonts.filter(f => ['Menlo', 'Monaco', 'Consolas', 'Fira Code', 'Source Code Pro', 'SF Mono'].includes(f));
+
+      const blocks = [];
+
+      blocks.push({ lines: ['scanning.'], hold: 800 });
+
+      // OS + chip
+      const osLines = [osStr.toLowerCase() + '.'];
+      if (chip) osLines.push(chip.toLowerCase() + '.');
+      else if (nvidia) osLines.push(nvidia.toLowerCase() + '.');
+      else if (gpu) osLines.push(gpu.substring(0, 40).toLowerCase() + '.');
+      osLines.push('premium device.');
+      blocks.push({ lines: osLines, hold: 1200 });
+
+      // Form factor
+      const hasWebcam = media.videoinput > 0;
+      const hasMic = media.audioinput > 0;
+      if (hasWebcam && hasMic && d.maxTouchPoints === 0) {
+        if (profile.device.parsed.os === 'macOS') {
+          blocks.push({ lines: ['webcam. microphone. no touch.', '=macbook pro.'], hold: 1000 });
+        } else {
+          blocks.push({ lines: ['webcam. microphone. no touch.', '=laptop.'], hold: 1000 });
+        }
+      }
+
+      // Power user
+      blocks.push({ lines: ['power savvy,', '', '=power user?'], hold: 1500 });
+
+      // Browser + tracking posture
+      const browserLines = [browserStr.toLowerCase() + '.'];
+      browserLines.push(d.cookieEnabled ? 'cookies: on.' : 'cookies: blocked.');
+      browserLines.push(d.doNotTrack === '1' ? 'do-not-track: on.' : 'no do-not-track.');
+      if (d.doNotTrack !== '1' && d.cookieEnabled) browserLines.push('no resistance.');
+      blocks.push({ lines: browserLines, hold: 1200 });
+
+      // Hardware
+      const hwLines = [];
+      hwLines.push((d.hardwareConcurrency || '?') + ' cores. ' + (d.deviceMemory || '?') + 'GB RAM.');
+      hwLines.push(d.screenWidth + 'x' + d.screenHeight + ' @' + d.devicePixelRatio + 'x.');
+      if (d.colorDepth >= 30) hwLines.push(d.colorDepth + '-bit color. professional display.');
+      else if (d.devicePixelRatio >= 2) hwLines.push('retina display.');
+      else hwLines.push('standard display.');
+      blocks.push({ lines: hwLines, hold: 1200 });
+
+      // Battery
+      if (battery && battery.level !== undefined) {
+        const pct = Math.round(battery.level * 100);
+        const bl = [pct + '% battery.' + (battery.charging ? ' charging.' : '')];
+        bl.push(battery.charging ? 'plugged in at desk.' : 'on battery. mobile.');
+        blocks.push({ lines: bl, hold: 1000 });
+      }
+
+      // Time
+      if (localHour !== null) {
+        const h = localHour;
+        const m = now.getMinutes();
+        const timeStr = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+        let desc = '', inference = '';
+        if (h >= 22 || h < 6) { desc = 'late night.'; inference = 'working late. dedicated? insomniac?'; }
+        else if (h >= 6 && h < 9) { desc = 'early morning.'; inference = 'early riser. disciplined.'; }
+        else if (h >= 9 && h < 17) { desc = 'work hours.'; inference = 'browsing during work.'; }
+        else { desc = 'evening.'; inference = 'after work. leisure time.'; }
+        blocks.push({ lines: [timeStr + ' local time.', desc, inference].filter(Boolean), hold: 1100 });
+      }
+
+      // Location
+      blocks.push({
+        lines: [
+          (d.timezone || 'unknown').toLowerCase() + '.',
+          loc.country.toLowerCase() + '.',
+          loc.market.toLowerCase() + ' market.',
+        ],
+        hold: 1000,
+      });
+
+      // Language anomaly
+      const langInForeign = d.language?.startsWith('en') && !['United States', 'United Kingdom', 'Canada', 'Australia'].includes(loc.country);
+      if (langInForeign) {
+        blocks.push({
+          lines: [d.language.toLowerCase() + ' speaker', 'in ' + loc.country.toLowerCase() + '.', 'expat? digital nomad?', 'target international ads.'],
+          hold: 1300,
+        });
+      }
+
+      // Font forensics
+      if (devFonts.length > 0 || designFonts.length > 0) {
+        const fl = [];
+        if (devFonts.length > 0) { fl.push('fonts: ' + devFonts.join(', ').toLowerCase() + '.'); fl.push('=developer.'); }
+        if (designFonts.length > 0) { fl.push('fonts: ' + designFonts.slice(0, 3).join(', ').toLowerCase() + '.'); fl.push('=designer too.'); }
+        blocks.push({ lines: fl, hold: 1100 });
+      }
+
+      // Profession
+      const allProf = profile.profession.all || [];
+      if (allProf.length > 0) {
+        blocks.push({
+          lines: allProf.slice(0, 3).map(p => p.label.toLowerCase() + '. (' + Math.round(p.confidence * 100) + '%)'),
+          hold: 1000,
+        });
+      }
+
+      // Income
+      blocks.push({
+        lines: [inc.bracket.toLowerCase() + '.', 'est. ' + inc.estimate.toLowerCase() + '.', '', '=sell premium ads?'],
+        hold: 1500,
+      });
+
+      // Entropy
+      blocks.push({
+        lines: [
+          entropy.totalBits.toFixed(1) + ' bits of entropy.',
+          'unique among ' + uniqueness.populationSize + '.',
+          uniqueness.percent + '% identifiable.',
+        ],
+        hold: 1200,
+      });
+
+      // Fingerprint vectors
+      blocks.push({
+        lines: ['canvas: unique.', 'audio: unique.', 'GPU: unique.', 'every signal confirms:', 'one person.'],
+        hold: 1300,
+      });
+
+      // Valuation
+      blocks.push({
+        lines: ['$' + pricing.cpm.toFixed(2) + ' CPM.', '$' + pricing.annualValue.toFixed(0) + '/year.'],
+        hold: 1000,
+      });
+
+      // Visitor ID
+      const vid = fpData.advanced?.visitorId || 'unknown';
+      blocks.push({ lines: ['visitor ID:', vid], hold: 1200 });
+
+      // Speed
+      blocks.push({ lines: ['collected in seconds.', 'no permission asked.'], hold: 1200 });
+
+      // Classification
+      blocks.push({ lines: ['classification:', 'advertising commodity.'], hold: 1500 });
+
+      // Final
+      blocks.push({ lines: ['you are the product.'], hold: 3000 });
+
+      return blocks;
+    }
+
+    // ---- Run ----
+
+    // Show scanning immediately
+    await showBlock(['scanning.'], 600);
+
+    // Collect data in background
+    const fpData = await collectData();
+
+    // Process
+    const profile = InferenceEngine.generateFullProfile(fpData);
+    const entropy = EntropyEngine.calculateEntropy(fpData);
+    const uniqueness = EntropyEngine.calculateUniqueness(entropy.totalBits);
+    const pricing = PricingEngine.getBreakdown(profile);
+
+    // Build monolog (skip first "scanning." — already shown)
+    const blocks = buildMonolog(fpData, profile, entropy, uniqueness, pricing);
+
+    // Play through blocks (skip first scanning block)
+    for (let i = 1; i < blocks.length; i++) {
+      await showBlock(blocks[i].lines, blocks[i].hold);
+    }
+
+    // Keep final message visible
+    stage.classList.remove('fade-out');
+    stage.innerHTML = '';
+    const finalDiv = document.createElement('div');
+    finalDiv.classList.add('line');
+    const sz = fitSize('you are the product.', window.innerWidth - 160, window.innerWidth < 768 ? 60 : 120, 32);
+    finalDiv.style.fontSize = sz + 'px';
+    finalDiv.textContent = 'you are the product.';
+    stage.appendChild(finalDiv);
+    requestAnimationFrame(() => finalDiv.classList.add('visible'));
+    hint.style.opacity = '0';
+
+  })();
+  </script>
+</body>
+</html>

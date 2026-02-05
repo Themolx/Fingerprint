@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You, For Sale — Full Report</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="loading-screen">
+    <div class="loading-text">COMPILING FULL SURVEILLANCE REPORT</div>
+    <div class="loading-spinner"></div>
+    <div class="loading-log" id="loading-log"></div>
+  </div>
+  <div id="app"></div>
+
+  <!-- FingerprintJS (bundled locally) -->
+  <script src="js/fp.min.js"></script>
+
+  <!-- Shared modules (local copies) -->
+  <script src="js/fingerprint-engine.js"></script>
+  <script src="js/inference-engine.js"></script>
+  <script src="js/ui-components.js"></script>
+
+  <!-- Analysis modules (local copies) -->
+  <script src="js/entropy.js"></script>
+  <script src="js/pricing.js"></script>
+
+  <!-- Extension modules -->
+  <script src="js/trackers.js"></script>
+  <script src="js/cookies.js"></script>
+  <script src="js/categories.js"></script>
+  <script src="js/history.js"></script>
+  <script src="js/patterns.js"></script>
+
+  <!-- Report renderer -->
+  <script src="report.js"></script>
+</body>
+</html>

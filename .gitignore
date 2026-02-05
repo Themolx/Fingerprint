@@ -1,0 +1,7 @@
+node_modules/
+*.mp4
+*.wav
+*.nfo
+260205/
+package-lock.json
+.DS_Store

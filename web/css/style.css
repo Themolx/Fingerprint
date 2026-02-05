@@ -1,0 +1,637 @@
+/* ============================================================
+   YOU, FOR SALE — Browser Fingerprint Visualizer
+   Dark, clinical aesthetic. Data broker dashboard feel.
+   ============================================================ */
+
+:root {
+  --bg-primary: #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-card: #111111;
+  --bg-card-hover: #1a1a1a;
+  --border: #333333;
+  --border-accent: #555555;
+  --text-primary: #ffffff;
+  --text-secondary: #aaaaaa;
+  --text-muted: #666666;
+  --accent-red: #ffffff;
+  --accent-orange: #cccccc;
+  --accent-yellow: #ffffff;
+  --accent-green: #aaaaaa;
+  --accent-blue: #ffffff;
+  --accent-purple: #cccccc;
+  --accent-cyan: #aaaaaa;
+  --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--sans);
+  line-height: 1.6;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Loading Screen ---- */
+#loading-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  transition: opacity 0.6s ease;
+}
+
+#loading-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading-text {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.loading-log {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 1.5rem;
+  text-align: left;
+  max-width: 400px;
+  line-height: 1.8;
+}
+
+.loading-log .log-line {
+  opacity: 0;
+  animation: fadeInLine 0.3s ease forwards;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeInLine {
+  to { opacity: 1; }
+}
+
+/* ---- Container ---- */
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+/* ---- Section ---- */
+.section {
+  margin-bottom: 3rem;
+}
+
+.section__title {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 1.2rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.section__divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 3rem 0;
+}
+
+/* ---- Header / Price Tag ---- */
+.header {
+  text-align: center;
+  padding: 3rem 0 1rem;
+}
+
+.header__subtitle {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent-red);
+  margin-bottom: 0.5rem;
+}
+
+.header__title {
+  font-size: 2.2rem;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.price-tag {
+  background: var(--bg-card);
+  border: 1px solid var(--border-accent);
+  border-radius: 0;
+  padding: 2rem;
+  text-align: center;
+  margin: 2rem 0;
+}
+
+.price-tag__label {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.price-tag__amount {
+  font-family: var(--mono);
+  font-size: 3.5rem;
+  font-weight: 700;
+  color: var(--accent-yellow);
+  line-height: 1.1;
+}
+
+.price-tag__unit {
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.price-tag__explanation {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 0.8rem;
+}
+
+/* ---- Product Card ---- */
+.product-card {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 1.5rem 2rem;
+  margin: 1.5rem 0;
+}
+
+.product-card__avatar {
+  flex-shrink: 0;
+  width: 80px;
+  height: 100px;
+  color: var(--text-muted);
+}
+
+.product-card__silhouette {
+  width: 100%;
+  height: 100%;
+}
+
+.product-card__info {
+  flex: 1;
+}
+
+.product-card__id {
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--accent-blue);
+  margin-bottom: 0.5rem;
+}
+
+.product-card__field {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.product-card__field span {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+}
+
+/* ---- Inference Cards ---- */
+.inference-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.inference-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 1.2rem 1.5rem;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+.inference-card:hover {
+  border-color: var(--border-accent);
+  background: var(--bg-card-hover);
+}
+
+.inference-card__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
+}
+
+.inference-card__icon {
+  display: none;
+}
+
+.inference-card__category {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+}
+
+.inference-card__body {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 0.8rem;
+}
+
+.inference-card__label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+
+.inference-card__raw-value {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.inference-card__arrow {
+  font-size: 1.2rem;
+  color: var(--accent-red);
+  padding-top: 0.8rem;
+  font-weight: bold;
+}
+
+.inference-card__inferred-value {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.inference-card__usage-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* ---- Entropy Bars ---- */
+.entropy-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.entropy-bar {
+  display: grid;
+  grid-template-columns: 160px 1fr 70px;
+  gap: 1rem;
+  align-items: center;
+}
+
+.entropy-bar__label {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.entropy-bar__track {
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.entropy-bar__fill {
+  height: 100%;
+  border-radius: 0;
+  background: #ffffff;
+  width: 0;
+  transition: width 0.8s ease;
+}
+
+.entropy-bar__bits {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.entropy-summary {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.entropy-summary__total {
+  font-family: var(--mono);
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--accent-purple);
+}
+
+.entropy-summary__label {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+
+.entropy-summary__description {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 0.8rem;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.5;
+}
+
+/* ---- Pricing Breakdown ---- */
+.pricing-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pricing-factor {
+  display: grid;
+  grid-template-columns: 160px 1fr auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.pricing-factor:last-child {
+  border-bottom: none;
+}
+
+.pricing-factor__label {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.pricing-factor__value {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.pricing-factor__effect {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--accent-yellow);
+  text-align: right;
+}
+
+/* ---- Raw Data Grid ---- */
+.raw-data-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.raw-data-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 0.8rem 1rem;
+}
+
+.raw-data-item__label {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.raw-data-item__value {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  margin-top: 0.3rem;
+  word-break: break-all;
+}
+
+/* ---- Privacy Notice ---- */
+.privacy-notice {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 1rem 1.2rem;
+  margin: 2rem 0;
+}
+
+.privacy-notice__icon {
+  display: none;
+}
+
+.privacy-notice__text {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.privacy-notice__text strong {
+  color: var(--text-primary);
+}
+
+/* ---- Extension CTA ---- */
+.extension-cta {
+  background: var(--bg-card);
+  border: 1px dashed var(--border-accent);
+  border-radius: 0;
+  padding: 2rem;
+  text-align: center;
+  margin: 2rem 0;
+}
+
+.extension-cta__title {
+  font-size: 1rem;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.extension-cta__text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+.extension-cta__note {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* ---- Export Button ---- */
+.export-section {
+  text-align: center;
+  margin: 2rem 0;
+}
+
+.btn {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  padding: 0.7rem 1.5rem;
+  border: 1px solid var(--border-accent);
+  border-radius: 0;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn:hover {
+  background: var(--bg-card-hover);
+  border-color: #ffffff;
+}
+
+.btn--primary {
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+/* ---- Footer ---- */
+.footer {
+  text-align: center;
+  padding: 2rem 0;
+  border-top: 1px solid var(--border);
+  margin-top: 3rem;
+}
+
+.footer__text {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  line-height: 1.8;
+}
+
+.footer__link {
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.footer__link:hover {
+  text-decoration: underline;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 640px) {
+  .container {
+    padding: 1rem;
+  }
+
+  .header__title {
+    font-size: 1.6rem;
+  }
+
+  .price-tag__amount {
+    font-size: 2.5rem;
+  }
+
+  .product-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 1rem;
+  }
+
+  .inference-card__body {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .inference-card__arrow {
+    transform: rotate(90deg);
+    text-align: center;
+    padding: 0;
+  }
+
+  .entropy-bar {
+    grid-template-columns: 100px 1fr 60px;
+    gap: 0.5rem;
+  }
+
+  .raw-data-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pricing-factor {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}
+
+/* ---- Scanline overlay for extra creepy effect ---- */
+.scanline-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}

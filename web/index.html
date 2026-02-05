@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You, For Sale — Browser Fingerprint Visualizer</title>
+  <meta name="description" content="See what any website can learn about you without your consent. An educational demonstration of browser fingerprinting and surveillance capitalism.">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loading-text">ASSEMBLING YOUR DOSSIER</div>
+    <div class="loading-spinner"></div>
+    <div class="loading-log" id="loading-log"></div>
+  </div>
+
+  <!-- App Container -->
+  <div id="app"></div>
+
+  <!-- FingerprintJS (open source) -->
+  <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
+
+  <!-- Shared modules -->
+  <script src="../shared/fingerprint-engine.js"></script>
+  <script src="../shared/inference-engine.js"></script>
+  <script src="../shared/ui-components.js"></script>
+
+  <!-- Web-specific modules -->
+  <script src="js/entropy.js"></script>
+  <script src="js/pricing.js"></script>
+  <script src="js/video-renderer.js"></script>
+  <script src="js/visualizer.js"></script>
+</body>
+</html>

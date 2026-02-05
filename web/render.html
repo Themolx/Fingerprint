@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You, For Sale — Video Renderer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #000;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 700px;
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 1.2rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+      font-weight: 400;
+    }
+    .subtitle {
+      font-size: 0.7rem;
+      color: #666;
+      margin-bottom: 2rem;
+      letter-spacing: 0.1em;
+    }
+    .drop-zone {
+      border: 1px dashed #333;
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s;
+      margin-bottom: 1.5rem;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #fff;
+    }
+    .drop-zone__label {
+      font-size: 0.8rem;
+      color: #aaa;
+      margin-bottom: 0.5rem;
+    }
+    .drop-zone__hint {
+      font-size: 0.65rem;
+      color: #444;
+    }
+    .or {
+      text-align: center;
+      font-size: 0.65rem;
+      color: #333;
+      margin-bottom: 1.5rem;
+      letter-spacing: 0.15em;
+    }
+    textarea {
+      width: 100%;
+      height: 180px;
+      background: #0a0a0a;
+      border: 1px solid #222;
+      color: #888;
+      font-family: 'Courier New', monospace;
+      font-size: 0.65rem;
+      padding: 1rem;
+      resize: vertical;
+      margin-bottom: 1.5rem;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: #555;
+      color: #ccc;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      font-family: 'Courier New', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0.8rem;
+      border: 1px solid #fff;
+      background: #000;
+      color: #fff;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn:hover {
+      background: #fff;
+      color: #000;
+    }
+    .btn:disabled {
+      border-color: #333;
+      color: #333;
+      cursor: not-allowed;
+      background: #000;
+    }
+    .status {
+      margin-top: 1.5rem;
+      font-size: 0.7rem;
+      color: #666;
+      min-height: 1.2em;
+    }
+    .status.error { color: #fff; }
+    .status.ok { color: #aaa; }
+    .file-info {
+      font-size: 0.65rem;
+      color: #555;
+      margin-bottom: 1rem;
+      display: none;
+    }
+    .file-info.visible { display: block; }
+    input[type="file"] { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Video Renderer</h1>
+    <div class="subtitle">DROP OR PASTE AN EXPORTED JSON PROFILE TO RENDER A SURVEILLANCE VIDEO</div>
+
+    <div class="drop-zone" id="drop-zone">
+      <div class="drop-zone__label">DROP JSON FILE HERE OR CLICK TO BROWSE</div>
+      <div class="drop-zone__hint">Accepts the exported "you-for-sale-profile-*.json" files</div>
+    </div>
+    <input type="file" id="file-input" accept=".json,application/json">
+
+    <div class="or">— OR PASTE JSON BELOW —</div>
+
+    <textarea id="json-input" placeholder="Paste your exported JSON profile here..."></textarea>
+
+    <div class="file-info" id="file-info"></div>
+
+    <button class="btn" id="render-btn" disabled>RENDER VIDEO</button>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <!-- Shared modules (no FingerprintJS needed — we use the pre-collected data) -->
+  <script src="../shared/inference-engine.js"></script>
+  <script src="../shared/ui-components.js"></script>
+
+  <!-- Web modules -->
+  <script src="js/entropy.js"></script>
+  <script src="js/pricing.js"></script>
+  <script src="js/video-renderer.js"></script>
+
+  <script>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const jsonInput = document.getElementById('json-input');
+    const renderBtn = document.getElementById('render-btn');
+    const statusEl = document.getElementById('status');
+    const fileInfoEl = document.getElementById('file-info');
+
+    let parsedData = null;
+
+    // --- Drop zone ---
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) readFile(file);
+    });
+    fileInput.addEventListener('change', e => {
+      if (e.target.files[0]) readFile(e.target.files[0]);
+    });
+
+    function readFile(file) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        jsonInput.value = e.target.result;
+        fileInfoEl.textContent = `Loaded: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+        fileInfoEl.classList.add('visible');
+        tryParse();
+      };
+      reader.readAsText(file);
+    }
+
+    // --- Textarea change ---
+    jsonInput.addEventListener('input', () => tryParse());
+
+    function tryParse() {
+      statusEl.className = 'status';
+      statusEl.textContent = '';
+      parsedData = null;
+      renderBtn.disabled = true;
+
+      const raw = jsonInput.value.trim();
+      if (!raw) return;
+
+      try {
+        const json = JSON.parse(raw);
+
+        // Validate required fields
+        if (!json.fingerprint && !json.basic) {
+          throw new Error('Missing fingerprint data. Expected an exported profile JSON.');
+        }
+
+        // Support both full export format and raw fingerprint-only format
+        let fpData, profileData, entropyData, pricingData;
+
+        if (json.fingerprint) {
+          // Full export format: { fingerprint, profile, entropy, pricing }
+          fpData = json.fingerprint;
+        } else {
+          // Raw fingerprint data directly
+          fpData = json;
+        }
+
+        // Re-run inference engine to get the inferences array
+        profileData = InferenceEngine.generateFullProfile(fpData);
+
+        // Re-calculate entropy
+        entropyData = EntropyEngine.calculateEntropy(fpData);
+        const uniqueness = EntropyEngine.calculateUniqueness(entropyData.totalBits);
+
+        // Re-calculate pricing
+        pricingData = PricingEngine.getBreakdown(profileData);
+
+        const visitorId = fpData.advanced?.visitorId || '00000000';
+
+        parsedData = {
+          fpData,
+          profile: profileData,
+          entropy: entropyData,
+          uniqueness,
+          pricing: pricingData,
+          visitorId,
+        };
+
+        renderBtn.disabled = false;
+        statusEl.className = 'status ok';
+        statusEl.textContent = `Ready — ${entropyData.totalBits.toFixed(1)} bits entropy, $${pricingData.cpm.toFixed(2)} CPM, ID: ${visitorId.substring(0, 12)}...`;
+
+      } catch (err) {
+        statusEl.className = 'status error';
+        statusEl.textContent = 'Parse error: ' + err.message;
+      }
+    }
+
+    // --- Render ---
+    renderBtn.addEventListener('click', async () => {
+      if (!parsedData) return;
+      renderBtn.disabled = true;
+      statusEl.className = 'status ok';
+      statusEl.textContent = 'Starting render...';
+
+      try {
+        const { fpData, profile, entropy, uniqueness, pricing, visitorId } = parsedData;
+        const blob = await VideoRenderer.render(fpData, profile, entropy, uniqueness, pricing, visitorId);
+
+        // Download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `you-for-sale-${visitorId.substring(0, 8)}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        statusEl.className = 'status ok';
+        statusEl.textContent = `Done — ${(blob.size / 1024 / 1024).toFixed(1)} MB video downloaded.`;
+      } catch (err) {
+        statusEl.className = 'status error';
+        statusEl.textContent = 'Render error: ' + err.message;
+        console.error(err);
+      }
+
+      renderBtn.disabled = false;
+    });
+  </script>
+</body>
+</html>
