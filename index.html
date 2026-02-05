@@ -367,6 +367,9 @@
       osLines.push('premium device.');
       blocks.push({ lines: osLines, hold: 1200 });
 
+      // expensive taste
+      blocks.push({ lines: ['someone invested in this.'], hold: 1000 });
+
       // Form factor
       const hasWebcam = media.videoinput > 0;
       const hasMic = media.audioinput > 0;
@@ -381,12 +384,18 @@
       // Power user
       blocks.push({ lines: ['power savvy,', '', '=power user?'], hold: 1500 });
 
+      // power user color
+      blocks.push({ lines: ['knows shortcuts.', 'skips tutorials.', 'reads documentation. for fun.'], hold: 1200 });
+
       // Browser + tracking posture
       const browserLines = [browserStr.toLowerCase() + '.'];
       browserLines.push(d.cookieEnabled ? 'cookies: on.' : 'cookies: blocked.');
       browserLines.push(d.doNotTrack === '1' ? 'do-not-track: on.' : 'no do-not-track.');
       if (d.doNotTrack !== '1' && d.cookieEnabled) browserLines.push('no resistance.');
       blocks.push({ lines: browserLines, hold: 1200 });
+
+      // false sense of security
+      blocks.push({ lines: ['thinks incognito means invisible.'], hold: 1200 });
 
       // Hardware
       const hwLines = [];
@@ -403,6 +412,11 @@
         const bl = [pct + '% battery.' + (battery.charging ? ' charging.' : '')];
         bl.push(battery.charging ? 'plugged in at desk.' : 'on battery. mobile.');
         blocks.push({ lines: bl, hold: 1000 });
+
+        // settled in
+        if (battery.charging) {
+          blocks.push({ lines: ['settled in.', 'not going anywhere.'], hold: 1000 });
+        }
       }
 
       // Time
@@ -416,6 +430,15 @@
         else if (h >= 9 && h < 17) { desc = 'work hours.'; inference = 'browsing during work.'; }
         else { desc = 'evening.'; inference = 'after work. leisure time.'; }
         blocks.push({ lines: [timeStr + ' local time.', desc, inference].filter(Boolean), hold: 1100 });
+
+        // time-of-day exploitation
+        if (h >= 22 || h < 6) {
+          blocks.push({ lines: ['can\'t sleep? or won\'t sleep?', '', 'late night impulse buys', 'convert 40% better.', 'increase bid.'], hold: 1500 });
+        } else if (h >= 9 && h < 17) {
+          blocks.push({ lines: ['should be working.', 'distracted.', 'perfect for engagement ads.'], hold: 1200 });
+        } else if (h >= 17 && h < 22) {
+          blocks.push({ lines: ['tired. guard is down.', 'emotional purchases peak at 8pm.'], hold: 1200 });
+        }
       }
 
       // Location
@@ -432,9 +455,12 @@
       const langInForeign = d.language?.startsWith('en') && !['United States', 'United Kingdom', 'Canada', 'Australia'].includes(loc.country);
       if (langInForeign) {
         blocks.push({
-          lines: [d.language.toLowerCase() + ' speaker', 'in ' + loc.country.toLowerCase() + '.', 'expat? digital nomad?', 'target international ads.'],
+          lines: [d.language.toLowerCase() + ' speaker', 'in ' + loc.country.toLowerCase() + '.', 'expat? digital nomad?'],
           hold: 1300,
         });
+
+        // expat exploitation
+        blocks.push({ lines: ['probably misses home.', 'show airline ads.'], hold: 1200 });
       }
 
       // Font forensics
@@ -443,6 +469,11 @@
         if (devFonts.length > 0) { fl.push('fonts: ' + devFonts.join(', ').toLowerCase() + '.'); fl.push('=developer.'); }
         if (designFonts.length > 0) { fl.push('fonts: ' + designFonts.slice(0, 3).join(', ').toLowerCase() + '.'); fl.push('=designer too.'); }
         blocks.push({ lines: fl, hold: 1100 });
+
+        // rare combo
+        if (devFonts.length > 0 && designFonts.length > 0) {
+          blocks.push({ lines: ['builds things and makes them pretty.', 'rare combination.', 'charge more.'], hold: 1300 });
+        }
       }
 
       // Profession
@@ -460,6 +491,9 @@
         hold: 1500,
       });
 
+      // can afford to say no
+      blocks.push({ lines: ['could afford to say no.', '', 'doesn\'t.'], hold: 1500 });
+
       // Entropy
       blocks.push({
         lines: [
@@ -476,11 +510,20 @@
         hold: 1300,
       });
 
+      // needle
+      blocks.push({ lines: ['needle in a haystack?', '', 'you ARE the needle.'], hold: 1500 });
+
       // Valuation
       blocks.push({
         lines: ['$' + pricing.cpm.toFixed(2) + ' CPM.', '$' + pricing.annualValue.toFixed(0) + '/year.'],
         hold: 1000,
       });
+
+      // less than a coffee
+      blocks.push({ lines: ['less than a coffee.', 'but thousands of times a day.'], hold: 1300 });
+
+      // we gave you a name
+      blocks.push({ lines: ['we gave you a name.', 'you didn\'t choose it.'], hold: 1300 });
 
       // Visitor ID
       const vid = fpData.advanced?.visitorId || 'unknown';
@@ -491,6 +534,12 @@
 
       // Classification
       blocks.push({ lines: ['classification:', 'advertising commodity.'], hold: 1500 });
+
+      // filed
+      blocks.push({ lines: ['filed. indexed. sold.', 'again and again and again.'], hold: 1500 });
+
+      // close the tab
+      blocks.push({ lines: ['you can close this tab.', '', 'we already have what we need.'], hold: 2000 });
 
       // Final
       blocks.push({ lines: ['you are the product.'], hold: 3000 });
