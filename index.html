@@ -40,7 +40,7 @@
     }
 
     .line {
-      font-weight: 700;
+      font-weight: 400;
       line-height: 1.25;
       opacity: 0;
       transform: translateY(6px);
@@ -53,6 +53,10 @@
     .line.visible {
       opacity: 1;
       transform: translateY(0);
+    }
+
+    .line.bold {
+      font-weight: 700;
     }
 
     .line.spacer {
@@ -153,10 +157,10 @@
       });
     }
 
-    // ---- Fit font size to viewport ----
-    function fitSize(text, maxW, maxPx, minPx) {
+    // ---- Fit font size to viewport (weight-aware) ----
+    function fitSize(text, maxW, maxPx, minPx, weight) {
       const el = document.createElement('span');
-      el.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font-family:var(--font);font-weight:700;`;
+      el.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font-family:var(--font);font-weight:${weight === 'bold' ? 700 : 400};`;
       document.body.appendChild(el);
       for (let s = maxPx; s >= minPx; s -= 2) {
         el.style.fontSize = s + 'px';
@@ -165,6 +169,52 @@
       }
       document.body.removeChild(el);
       return minPx;
+    }
+
+    // ---- Web Audio sonification ----
+    let audioCtx = null;
+    function initAudio() {
+      if (audioCtx) return;
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+    }
+    function playClick() {
+      if (!audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(200 + Math.random() * 400, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.12);
+      } catch(e) {}
+    }
+    let droneOsc = null, droneGain = null;
+    function startDrone() {
+      if (!audioCtx) return;
+      try {
+        droneOsc = audioCtx.createOscillator();
+        droneGain = audioCtx.createGain();
+        droneOsc.type = 'sine';
+        droneOsc.frequency.value = 45;
+        droneGain.gain.value = 0;
+        droneGain.gain.linearRampToValueAtTime(0.04, audioCtx.currentTime + 3);
+        droneOsc.connect(droneGain);
+        droneGain.connect(audioCtx.destination);
+        droneOsc.start();
+      } catch(e) {}
+    }
+    function stopDrone() {
+      if (droneGain && audioCtx) {
+        try {
+          droneGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 2);
+          setTimeout(() => { try { droneOsc.stop(); } catch(e) {} }, 3000);
+        } catch(e) {}
+      }
     }
 
     // ---- Show a block of lines ----
@@ -184,13 +234,20 @@
         if (text === '') {
           div.classList.add('spacer');
         } else {
-          const sz = fitSize(text, maxW, maxFont, minFont);
+          const isBold = text.startsWith('!');
+          const cleanText = isBold ? text.slice(1) : text;
+          const weight = isBold ? 'bold' : 'normal';
+          if (isBold) div.classList.add('bold');
+          const sz = fitSize(cleanText, maxW, maxFont, minFont, weight);
           div.style.fontSize = sz + 'px';
-          div.textContent = text;
+          div.textContent = cleanText;
         }
         stage.appendChild(div);
         els.push(div);
       }
+
+      // Sonification click on each block
+      playClick();
 
       // Stagger line appearance
       for (let i = 0; i < els.length; i++) {
@@ -401,32 +458,32 @@
       }
 
       // 1. OPENING
-      add(['scanning.'], 'normal');
+      add(['!scanning.'], 'normal');
 
       // 2. DEVICE
       if (isApple && chip) {
         add([dev.parsed.os.toLowerCase() + ' ' + dev.parsed.osVersion + '.', chip.toLowerCase() + '.', 'apple silicon.'], 'normal');
-        add(['premium hardware.'], 'flash');
+        add(['!premium hardware.'], 'flash');
       } else if (isApple && !chip) {
         add([dev.parsed.os.toLowerCase() + ' ' + dev.parsed.osVersion + '.', 'apple. intel era.'], 'normal');
-        add(['aging hardware. still premium brand.'], 'flash');
+        add(['!aging hardware. still premium brand.'], 'flash');
       } else if (isWindows && nvidia) {
         add(['windows ' + dev.parsed.osVersion + '.', nvidia.toLowerCase() + '.'], 'normal');
-        if (nvidia.match(/RTX\s*(30|40|50)/i)) add(['gaming rig. or workstation.', 'either way: disposable income.'], 'normal');
-        else add(['mid-range GPU. practical.'], 'flash');
+        if (nvidia.match(/RTX\s*(30|40|50)/i)) add(['!gaming rig. or workstation.', '!either way: disposable income.'], 'normal');
+        else add(['mid-range GPU.', '!practical.'], 'flash');
       } else if (isWindows && amd) {
         add(['windows ' + dev.parsed.osVersion + '.', amd.toLowerCase() + '.'], 'normal');
-        add(['AMD build. value-oriented.'], 'flash');
+        add(['!AMD build. value-oriented.'], 'flash');
       } else if (isWindows) {
         add(['windows ' + dev.parsed.osVersion + '.'], 'normal');
-        if (hasHighMemory && hasHighCores) add(['powerful machine. workstation class.'], 'normal');
-        else add([(d.deviceMemory||'?') + 'GB RAM. consumer tier.'], 'flash');
+        if (hasHighMemory && hasHighCores) add(['!powerful machine. workstation class.'], 'normal');
+        else add([(d.deviceMemory||'?') + 'GB RAM.', '!consumer tier.'], 'flash');
       } else if (isLinux) {
         add(['linux.'], 'normal');
-        add(['technical subject. privacy-conscious? or just stubborn.'], 'normal');
+        add(['!technical subject.', '!privacy-conscious? or just stubborn.'], 'normal');
       } else if (dev.parsed.os === 'iOS') {
         add(['iOS ' + dev.parsed.osVersion + '.', 'apple ecosystem.'], 'normal');
-        add(['high-value mobile target.'], 'flash');
+        add(['!high-value mobile target.'], 'flash');
       } else if (dev.parsed.os === 'Android') {
         if (hasHighMemory) add(['android. ' + (d.deviceMemory||'?') + 'GB. flagship.'], 'normal');
         else add(['android. ' + (d.deviceMemory||'?') + 'GB.', 'budget device. emerging market?'], 'normal');
@@ -436,10 +493,10 @@
 
       // 3. FORM FACTOR
       if (!isMobile && hasWebcam && hasMic && (d.maxTouchPoints||0) === 0) {
-        if (isApple) add(['webcam. microphone. no touch.', '=laptop. probably macbook.'], 'normal');
-        else add(['webcam. microphone. no touch.', '=laptop.'], 'normal');
+        if (isApple) add(['webcam. microphone. no touch.', '!=laptop. probably macbook.'], 'normal');
+        else add(['webcam. microphone. no touch.', '!=laptop.'], 'normal');
       } else if (!isMobile && !hasWebcam && hasMic) {
-        add(['no webcam. external mic.', 'desktop workstation.'], 'normal');
+        add(['no webcam. external mic.', '!desktop workstation.'], 'normal');
       } else if (isMobile && (d.maxTouchPoints||0) > 3) {
         add(['multi-touch. ' + d.maxTouchPoints + ' points.', 'mobile device.'], 'normal');
       }
@@ -447,35 +504,35 @@
       // 4. TECH LITERACY (data-driven)
       const techScore = tech.score || 50;
       if (techScore >= 80) {
-        add(['tech literacy: ' + techScore + '/100.', 'expert level.'], 'normal');
-        add(['knows shortcuts. skips tutorials.', 'reads documentation. for fun.'], 'normal');
-        add(['harder to monetize. resistant to clickbait.'], 'flash');
+        add(['tech literacy: ' + techScore + '/100.', '!expert level.'], 'normal');
+        add(['!knows shortcuts. skips tutorials.', '!reads documentation. for fun.'], 'normal');
+        add(['!harder to monetize. resistant to clickbait.'], 'flash');
       } else if (techScore >= 60) {
-        add(['tech literacy: ' + techScore + '/100.', 'above average.'], 'normal');
-        add(['will research before purchasing.', 'serve comparison ads. reviews.'], 'normal');
+        add(['tech literacy: ' + techScore + '/100.', '!above average.'], 'normal');
+        add(['!will research before purchasing.', 'serve comparison ads. reviews.'], 'normal');
       } else if (techScore >= 40) {
-        add(['tech literacy: ' + techScore + '/100.', 'average user.'], 'normal');
-        add(['standard targeting effective.'], 'flash');
+        add(['tech literacy: ' + techScore + '/100.', '!average user.'], 'normal');
+        add(['!standard targeting effective.'], 'flash');
       } else {
-        add(['tech literacy: ' + techScore + '/100.', 'below average.'], 'normal');
-        add(['susceptible to urgency tactics.', '"limited time offer" works here.'], 'normal');
+        add(['tech literacy: ' + techScore + '/100.', '!below average.'], 'normal');
+        add(['!susceptible to urgency tactics.', '!"limited time offer" works here.'], 'normal');
       }
 
       // 5. BROWSER + TRACKING
       if (isBrave) {
         add(['brave browser.', 'privacy-focused. actively hiding.'], 'normal');
-        add(['still visible. still trackable.', 'the fingerprint doesn\'t lie.'], 'linger');
+        add(['!still visible. still trackable.', '!the fingerprint doesn\'t lie.'], 'linger');
       } else if (isFirefox) {
         add(['firefox.', hasDNT ? 'do-not-track: enabled.' : 'no do-not-track.'], 'normal');
-        if (hasDNT) add(['irony: DNT makes the fingerprint more unique.', 'trying to hide. standing out instead.'], 'normal');
+        if (hasDNT) add(['!irony: DNT makes the fingerprint more unique.', '!trying to hide. standing out instead.'], 'normal');
       } else if (isSafari) {
         add(['safari.', 'some built-in protections.'], 'normal');
-        add(['apple\'s privacy theater.', 'enough to feel safe. not enough to be safe.'], 'normal');
+        add(['!apple\'s privacy theater.', '!enough to feel safe. not enough to be safe.'], 'normal');
       } else if (isChrome) {
         add(['chrome ' + dev.parsed.browserVersion + '.', hasCookies ? 'cookies: enabled.' : 'cookies: blocked.', hasDNT ? 'do-not-track: on.' : 'no do-not-track.'], 'normal');
         if (!hasDNT && hasCookies) {
-          add(['default settings. no resistance.'], 'flash');
-          add(['thinks incognito means invisible.'], 'flash');
+          add(['!default settings. no resistance.'], 'flash');
+          add(['!thinks incognito means invisible.'], 'flash');
         }
       } else {
         add([dev.parsed.browser.toLowerCase() + ' ' + dev.parsed.browserVersion + '.'], 'normal');
@@ -490,8 +547,8 @@
       if (d.screenWidth && d.screenHeight) add([d.screenWidth + '\u00d7' + d.screenHeight + ' @' + (d.devicePixelRatio||1) + 'x.'], 'normal');
 
       if (hasWideColor && hasRetina) {
-        add([d.colorDepth + '-bit color. wide gamut. HDR.', 'professional-grade display.'], 'normal');
-        add(['content creator? photographer? designer?'], 'flash');
+        add([d.colorDepth + '-bit color. wide gamut. HDR.', '!professional-grade display.'], 'normal');
+        add(['!content creator? photographer? designer?'], 'flash');
       } else if (hasRetina) {
         add(['retina display.' + (isPremium ? ' premium screen.' : '')], 'flash');
       }
@@ -501,10 +558,10 @@
         const pct = Math.round(battery.level * 100);
         if (battery.charging) {
           add(['battery: ' + pct + '%. charging.', 'plugged in. stationary.'], 'normal');
-          add(['settled in. not going anywhere.'], 'flash');
+          add(['!settled in. not going anywhere.'], 'flash');
         } else if (pct <= 20) {
           add(['battery: ' + pct + '%. not charging.', 'running low. will leave soon.'], 'normal');
-          add(['limited window. act fast.'], 'flash');
+          add(['!limited window. act fast.'], 'flash');
         } else if (pct <= 50) {
           add(['battery: ' + pct + '%. on battery.', 'mobile. or forgot the charger.'], 'normal');
         } else {
@@ -524,28 +581,28 @@
         const ts = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
         if (h >= 0 && h < 5) {
           add([ts + ' local time.', 'deep night.'], 'normal');
-          add(['impulse control lowest between midnight and 4am.', 'increase bid.'], 'linger');
+          add(['!impulse control lowest between midnight and 4am.', '!increase bid.'], 'linger');
         } else if (h >= 22 || h === 5) {
           add([ts + ' local time.', 'late night.'], 'normal');
-          add(['can\'t sleep? or won\'t sleep?', 'late night purchases convert 40% better.'], 'linger');
+          add(['!can\'t sleep? or won\'t sleep?', 'late night purchases convert 40% better.'], 'linger');
         } else if (h >= 6 && h < 9) {
           add([ts + ' local time.', 'early session.'], 'normal');
-          add(['routine browser. habitual.', 'serve morning news. coffee ads.'], 'normal');
+          add(['!routine browser. habitual.', 'serve morning news. coffee ads.'], 'normal');
         } else if (h >= 9 && h < 12) {
           add([ts + ' local time.', 'morning. work hours.'], 'normal');
-          add(['should be working. procrastinating.', 'receptive to distractions.'], 'normal');
+          add(['!should be working. procrastinating.', '!receptive to distractions.'], 'normal');
         } else if (h >= 12 && h < 14) {
           add([ts + ' local time.', 'lunch break.'], 'normal');
-          add(['browsing. shopping.', 'food delivery? retail?'], 'normal');
+          add(['browsing. shopping.', '!food delivery? retail?'], 'normal');
         } else if (h >= 14 && h < 17) {
           add([ts + ' local time.', 'afternoon slump.'], 'normal');
-          add(['attention fading. easier to convert.'], 'flash');
+          add(['!attention fading. easier to convert.'], 'flash');
         } else if (h >= 17 && h < 20) {
           add([ts + ' local time.', 'evening.'], 'normal');
-          add(['decision fatigue setting in.', 'emotional purchases peak now.'], 'normal');
+          add(['!decision fatigue setting in.', '!emotional purchases peak now.'], 'normal');
         } else {
           add([ts + ' local time.', 'late evening.'], 'normal');
-          add(['winding down. guard lowered.'], 'flash');
+          add(['!winding down. guard lowered.'], 'flash');
         }
       }
 
@@ -557,10 +614,10 @@
       const nonEnglishInEnglish = langCode !== 'en' && ['United States','United Kingdom','Canada','Australia'].includes(loc.country);
       if (langInForeign) {
         add(['english speaker in ' + loc.country.toLowerCase() + '.', 'expatriate? remote worker? digital nomad?'], 'normal');
-        add(['probably misses home.', 'show airline ads. relocation services.'], 'normal');
+        add(['!probably misses home.', '!show airline ads. relocation services.'], 'normal');
       } else if (nonEnglishInEnglish) {
         add([d.language.toLowerCase() + ' speaker in ' + loc.country.toLowerCase() + '.', 'immigrant? international student?'], 'normal');
-        add(['target with community services. language learning ads.'], 'normal');
+        add(['!target with community services.', '!language learning ads.'], 'normal');
       }
 
       // 10. FONT FORENSICS
@@ -568,13 +625,13 @@
       const devFonts = fonts.filter(f => ['Menlo','Monaco','Consolas','Fira Code','Source Code Pro','SF Mono'].includes(f));
       if (devFonts.length > 0 && designFonts.length > 0) {
         add(['developer fonts: ' + devFonts.slice(0,2).join(', ').toLowerCase() + '.', 'design fonts: ' + designFonts.slice(0,2).join(', ').toLowerCase() + '.'], 'normal');
-        add(['builds things AND makes them pretty.', 'rare combination. high value.'], 'normal');
+        add(['!builds things AND makes them pretty.', '!rare combination. high value.'], 'normal');
       } else if (devFonts.length > 0) {
         add(['developer fonts detected.', devFonts.slice(0,3).join(', ').toLowerCase() + '.'], 'normal');
-        add(['writes code.'], 'flash');
+        add(['!writes code.'], 'flash');
       } else if (designFonts.length > 0) {
         add(['design fonts detected.', designFonts.slice(0,3).join(', ').toLowerCase() + '.'], 'normal');
-        add(['visual professional.'], 'flash');
+        add(['!visual professional.'], 'flash');
       } else if (fonts.length > 20) {
         add([fonts.length + ' fonts installed.', 'above average. creative field?'], 'normal');
       }
@@ -588,14 +645,14 @@
       // 12. INCOME
       if (inc.bracket === 'High' || inc.bracket === 'Upper-Middle') {
         add([inc.bracket.toLowerCase() + ' income.', 'est. ' + inc.estimate.toLowerCase() + '.'], 'normal');
-        add(['premium ad inventory.', 'luxury brands. SaaS. investment products.'], 'normal');
-        add(['could afford to say no.', '', 'doesn\'t.'], 'linger');
+        add(['!premium ad inventory.', 'luxury brands. SaaS. investment products.'], 'normal');
+        add(['!could afford to say no.', '', '!doesn\'t.'], 'linger');
       } else if (inc.bracket === 'Middle') {
         add(['middle income.', 'est. ' + inc.estimate.toLowerCase() + '.'], 'normal');
-        add(['volume target.', 'discount codes. subscription trials.'], 'normal');
+        add(['!volume target.', 'discount codes. subscription trials.'], 'normal');
       } else {
         add(['lower income bracket.', 'est. ' + inc.estimate.toLowerCase() + '.'], 'normal');
-        add(['cost-sensitive.', 'payday loan ads. buy-now-pay-later.'], 'normal');
+        add(['!cost-sensitive.', 'payday loan ads. buy-now-pay-later.'], 'normal');
       }
 
       // 13. CONNECTION
@@ -619,28 +676,28 @@
         add([bits.toFixed(1) + ' bits.', 'common profile. harder to single out.', 'but not impossible.'], 'normal');
       }
 
-      add(['canvas: unique.', 'audio: unique.', 'GPU: unique.', 'every signal confirms: one subject.'], 'normal');
-      add(['needle in a haystack?', '', 'subject IS the needle.'], 'linger');
+      add(['canvas: unique.', 'audio: unique.', 'GPU: unique.', '!every signal confirms: one subject.'], 'normal');
+      add(['needle in a haystack?', '', '!subject IS the needle.'], 'linger');
 
       // 15. VALUATION
       add(['$' + pricing.cpm.toFixed(2) + ' CPM.', '$' + pricing.annualValue.toFixed(0) + '/year.'], 'normal');
-      add(['less than a coffee.', 'but thousands of times a day.'], 'normal');
+      add(['!less than a coffee.', '!but thousands of times a day.'], 'normal');
 
       const factors = pricing.factors || [];
       if (factors.length > 0) add(factors.slice(0, 4).map(f => f.label.toLowerCase() + ': ' + f.effect.toLowerCase() + '.'), 'normal');
 
       // 16. IDENTIFICATION
-      add(['subject fully profiled.'], 'flash');
-      add(['we gave it a name.', 'it didn\'t choose it.'], 'normal');
+      add(['!subject fully profiled.'], 'flash');
+      add(['!we gave you a name.', '!you didn\'t choose it.'], 'normal');
       const vid = fpData.advanced?.visitorId || 'unknown';
       add(['visitor ID:', vid], 'normal');
       add(['collected in seconds.', 'no permission required.'], 'normal');
 
       // 17. ENDING — switches to "you"
-      add(['classification:', 'advertising commodity.'], 'linger');
-      add(['filed. indexed. sold.', 'again and again and again.'], 'linger');
-      add(['you can close this tab.', '', 'we already have what we need.'], 'linger');
-      add(['you are the product.'], 'linger');
+      add(['classification:', '!advertising commodity.'], 'linger');
+      add(['!filed. indexed. sold.', '!again and again and again.'], 'linger');
+      add(['you can close this tab.', '', '!we already have what we need.'], 'linger');
+      add(['!you are the product.'], 'linger');
 
       // Apply smooth timing (v3-style)
       for (let i = 0; i < raw.length; i++) {
@@ -669,7 +726,13 @@
     // ---- Run ----
 
     // Show scanning immediately
-    await showBlock(['scanning.'], 600);
+    // Init audio on first interaction or immediately
+    initAudio();
+    document.addEventListener('click', initAudio, { once: true });
+    document.addEventListener('keydown', initAudio, { once: true });
+    startDrone();
+
+    await showBlock(['!scanning.'], 600);
 
     // Collect data + load repos in parallel
     const [fpData] = await Promise.all([collectData(), loadRepos()]);
@@ -692,13 +755,14 @@
     stage.classList.remove('fade-out');
     stage.innerHTML = '';
     const finalDiv = document.createElement('div');
-    finalDiv.classList.add('line');
-    const sz = fitSize('you are the product.', window.innerWidth - 160, window.innerWidth < 768 ? 60 : 120, 32);
+    finalDiv.classList.add('line', 'bold');
+    const sz = fitSize('you are the product.', window.innerWidth - 160, window.innerWidth < 768 ? 60 : 120, 32, 'bold');
     finalDiv.style.fontSize = sz + 'px';
     finalDiv.textContent = 'you are the product.';
     stage.appendChild(finalDiv);
     requestAnimationFrame(() => finalDiv.classList.add('visible'));
     hint.style.opacity = '0';
+    stopDrone();
 
     // Show footer with repos
     document.getElementById('footer').style.display = 'block';
