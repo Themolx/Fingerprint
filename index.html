@@ -90,15 +90,36 @@
       transition: opacity 0.5s;
     }
 
+    #footer {
+      display: none;
+      position: fixed;
+      bottom: 30px;
+      left: 80px;
+      right: 80px;
+      font-size: 11px;
+      color: #222;
+      font-weight: 400;
+      font-family: var(--font);
+      letter-spacing: 0.5px;
+    }
+    #footer a { color: #333; text-decoration: none; }
+    #footer a:hover { color: #fff; }
+    #footer .repos { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 6px; }
+
     @media (max-width: 768px) {
       #stage { padding: 40px 30px; }
       #hint { left: 30px; bottom: 20px; }
+      #footer { left: 30px; right: 30px; }
     }
   </style>
 </head>
 <body>
   <div id="stage"></div>
   <div id="hint">press space to skip</div>
+  <div id="footer">
+    <div>Themolx</div>
+    <div class="repos" id="repos"></div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
   <script src="shared/inference-engine.js"></script>
@@ -327,7 +348,26 @@
       };
     }
 
-    // ---- Build monolog from data ----
+    // ---- Seeded RNG for deterministic scared timing ----
+    let _seed = 42;
+    function srand(s) { _seed = s; }
+    function rng() { _seed = (_seed * 16807) % 2147483647; return (_seed - 1) / 2147483646; }
+
+    // ---- Scared timing (ms) ----
+    function scaredTiming(index, total, lineCount, importance) {
+      const progress = index / Math.max(total, 1);
+      let curve;
+      if (progress < 0.15) curve = 1.3;
+      else if (progress < 0.5) curve = 0.75;
+      else if (progress < 0.75) curve = 0.6;
+      else curve = 1.1 + (progress - 0.75) * 4;
+      const base = 300 + lineCount * 220;
+      const impMult = importance === 'flash' ? 0.35 : importance === 'linger' ? 2.2 : 1.0;
+      const jitter = 0.75 + rng() * 0.5;
+      return Math.max(250, base * curve * impMult * jitter);
+    }
+
+    // ---- Build data-conditional monolog (v4) ----
     function buildMonolog(fpData, profile, entropy, uniqueness, pricing) {
       const d = fpData.basic || {};
       const gpu = fpData.webgl?.renderer || '';
@@ -335,216 +375,307 @@
       const battery = fpData.battery || {};
       const media = fpData.mediaDevices || {};
 
-      const osStr = profile.device.parsed.os + ' ' + profile.device.parsed.osVersion;
-      const browserStr = profile.device.parsed.browser + ' ' + profile.device.parsed.browserVersion;
+      const dev = profile.device;
+      const loc = profile.location;
+      const inc = profile.income;
+      const tech = profile.techLiteracy;
+      const prof = profile.profession;
+
       const chipMatch = gpu.match(/Apple (M\d+\s*\w*)/i);
       const chip = chipMatch ? chipMatch[1] : '';
       const nvidiaMatch = gpu.match(/((?:RTX|GTX)\s*\d+\s*\w*)/i);
       const nvidia = nvidiaMatch ? nvidiaMatch[1] : '';
-      const loc = profile.location;
-      const inc = profile.income;
+      const amdMatch = gpu.match(/(Radeon\s*(?:RX)?\s*\d+\s*\w*)/i);
+      const amd = amdMatch ? amdMatch[1] : '';
 
-      // Time analysis
+      const isMobile = dev.parsed.mobile === true;
+      const isApple = dev.parsed.os === 'macOS' || dev.parsed.os === 'iOS';
+      const isLinux = dev.parsed.os === 'Linux';
+      const isWindows = dev.parsed.os === 'Windows';
+      const isPremium = dev.deviceTier === 'Premium';
+      const hasHighMemory = (d.deviceMemory || 0) >= 8;
+      const hasHighCores = (d.hardwareConcurrency || 0) >= 8;
+      const hasRetina = (d.devicePixelRatio || 1) >= 2;
+      const hasWideColor = d.colorDepth >= 30;
+      const hasWebcam = (media.videoinput || 0) > 0;
+      const hasMic = (media.audioinput || 0) > 0;
+      const hasDNT = d.doNotTrack === '1' || d.doNotTrack === 1;
+      const hasCookies = d.cookieEnabled !== false;
+      const isFirefox = dev.parsed.browser === 'Firefox';
+      const isSafari = dev.parsed.browser === 'Safari';
+      const isBrave = (d.userAgent || '').includes('Brave');
+      const isChrome = dev.parsed.browser === 'Chrome' && !isBrave;
+
+      const raw = [];
+      function add(lines, importance) {
+        raw.push({ lines: lines.filter(Boolean), importance: importance || 'normal' });
+      }
+
+      // 1. OPENING
+      add(['scanning.'], 'normal');
+
+      // 2. DEVICE
+      if (isApple && chip) {
+        add([dev.parsed.os.toLowerCase() + ' ' + dev.parsed.osVersion + '.', chip.toLowerCase() + '.', 'apple silicon.'], 'normal');
+        add(['premium hardware.'], 'flash');
+      } else if (isApple && !chip) {
+        add([dev.parsed.os.toLowerCase() + ' ' + dev.parsed.osVersion + '.', 'apple. intel era.'], 'normal');
+        add(['aging hardware. still premium brand.'], 'flash');
+      } else if (isWindows && nvidia) {
+        add(['windows ' + dev.parsed.osVersion + '.', nvidia.toLowerCase() + '.'], 'normal');
+        if (nvidia.match(/RTX\s*(30|40|50)/i)) add(['gaming rig. or workstation.', 'either way: disposable income.'], 'normal');
+        else add(['mid-range GPU. practical.'], 'flash');
+      } else if (isWindows && amd) {
+        add(['windows ' + dev.parsed.osVersion + '.', amd.toLowerCase() + '.'], 'normal');
+        add(['AMD build. value-oriented.'], 'flash');
+      } else if (isWindows) {
+        add(['windows ' + dev.parsed.osVersion + '.'], 'normal');
+        if (hasHighMemory && hasHighCores) add(['powerful machine. workstation class.'], 'normal');
+        else add([(d.deviceMemory||'?') + 'GB RAM. consumer tier.'], 'flash');
+      } else if (isLinux) {
+        add(['linux.'], 'normal');
+        add(['technical subject. privacy-conscious? or just stubborn.'], 'normal');
+      } else if (dev.parsed.os === 'iOS') {
+        add(['iOS ' + dev.parsed.osVersion + '.', 'apple ecosystem.'], 'normal');
+        add(['high-value mobile target.'], 'flash');
+      } else if (dev.parsed.os === 'Android') {
+        if (hasHighMemory) add(['android. ' + (d.deviceMemory||'?') + 'GB. flagship.'], 'normal');
+        else add(['android. ' + (d.deviceMemory||'?') + 'GB.', 'budget device. emerging market?'], 'normal');
+      } else {
+        add([dev.parsed.os.toLowerCase() + ' ' + dev.parsed.osVersion + '.'], 'normal');
+      }
+
+      // 3. FORM FACTOR
+      if (!isMobile && hasWebcam && hasMic && (d.maxTouchPoints||0) === 0) {
+        if (isApple) add(['webcam. microphone. no touch.', '=laptop. probably macbook.'], 'normal');
+        else add(['webcam. microphone. no touch.', '=laptop.'], 'normal');
+      } else if (!isMobile && !hasWebcam && hasMic) {
+        add(['no webcam. external mic.', 'desktop workstation.'], 'normal');
+      } else if (isMobile && (d.maxTouchPoints||0) > 3) {
+        add(['multi-touch. ' + d.maxTouchPoints + ' points.', 'mobile device.'], 'normal');
+      }
+
+      // 4. TECH LITERACY (data-driven)
+      const techScore = tech.score || 50;
+      if (techScore >= 80) {
+        add(['tech literacy: ' + techScore + '/100.', 'expert level.'], 'normal');
+        add(['knows shortcuts. skips tutorials.', 'reads documentation. for fun.'], 'normal');
+        add(['harder to monetize. resistant to clickbait.'], 'flash');
+      } else if (techScore >= 60) {
+        add(['tech literacy: ' + techScore + '/100.', 'above average.'], 'normal');
+        add(['will research before purchasing.', 'serve comparison ads. reviews.'], 'normal');
+      } else if (techScore >= 40) {
+        add(['tech literacy: ' + techScore + '/100.', 'average user.'], 'normal');
+        add(['standard targeting effective.'], 'flash');
+      } else {
+        add(['tech literacy: ' + techScore + '/100.', 'below average.'], 'normal');
+        add(['susceptible to urgency tactics.', '"limited time offer" works here.'], 'normal');
+      }
+
+      // 5. BROWSER + TRACKING
+      if (isBrave) {
+        add(['brave browser.', 'privacy-focused. actively hiding.'], 'normal');
+        add(['still visible. still trackable.', 'the fingerprint doesn\'t lie.'], 'linger');
+      } else if (isFirefox) {
+        add(['firefox.', hasDNT ? 'do-not-track: enabled.' : 'no do-not-track.'], 'normal');
+        if (hasDNT) add(['irony: DNT makes the fingerprint more unique.', 'trying to hide. standing out instead.'], 'normal');
+      } else if (isSafari) {
+        add(['safari.', 'some built-in protections.'], 'normal');
+        add(['apple\'s privacy theater.', 'enough to feel safe. not enough to be safe.'], 'normal');
+      } else if (isChrome) {
+        add(['chrome ' + dev.parsed.browserVersion + '.', hasCookies ? 'cookies: enabled.' : 'cookies: blocked.', hasDNT ? 'do-not-track: on.' : 'no do-not-track.'], 'normal');
+        if (!hasDNT && hasCookies) {
+          add(['default settings. no resistance.'], 'flash');
+          add(['thinks incognito means invisible.'], 'flash');
+        }
+      } else {
+        add([dev.parsed.browser.toLowerCase() + ' ' + dev.parsed.browserVersion + '.'], 'normal');
+      }
+
+      // 6. HARDWARE
+      const hwParts = [];
+      if (d.hardwareConcurrency) hwParts.push(d.hardwareConcurrency + ' cores.');
+      if (d.deviceMemory) hwParts.push(d.deviceMemory + 'GB RAM.');
+      if (hwParts.length > 0) add([hwParts.join(' ')], 'normal');
+
+      if (d.screenWidth && d.screenHeight) add([d.screenWidth + '\u00d7' + d.screenHeight + ' @' + (d.devicePixelRatio||1) + 'x.'], 'normal');
+
+      if (hasWideColor && hasRetina) {
+        add([d.colorDepth + '-bit color. wide gamut. HDR.', 'professional-grade display.'], 'normal');
+        add(['content creator? photographer? designer?'], 'flash');
+      } else if (hasRetina) {
+        add(['retina display.' + (isPremium ? ' premium screen.' : '')], 'flash');
+      }
+
+      // 7. BATTERY
+      if (battery && battery.level !== undefined) {
+        const pct = Math.round(battery.level * 100);
+        if (battery.charging) {
+          add(['battery: ' + pct + '%. charging.', 'plugged in. stationary.'], 'normal');
+          add(['settled in. not going anywhere.'], 'flash');
+        } else if (pct <= 20) {
+          add(['battery: ' + pct + '%. not charging.', 'running low. will leave soon.'], 'normal');
+          add(['limited window. act fast.'], 'flash');
+        } else if (pct <= 50) {
+          add(['battery: ' + pct + '%. on battery.', 'mobile. or forgot the charger.'], 'normal');
+        } else {
+          add(['battery: ' + pct + '%.', 'session could be long.'], 'normal');
+        }
+      }
+
+      // 8. TIME OF DAY
       let localHour = null;
       const now = new Date();
       if (d.timezoneOffset !== undefined) {
         const local = new Date(now.getTime() - d.timezoneOffset * 60000);
         localHour = local.getUTCHours();
       }
-
-      const designFonts = fonts.filter(f => ['Futura', 'Avenir', 'Avenir Next', 'Gill Sans', 'Helvetica Neue', 'Open Sans', 'Proxima Nova'].includes(f));
-      const devFonts = fonts.filter(f => ['Menlo', 'Monaco', 'Consolas', 'Fira Code', 'Source Code Pro', 'SF Mono'].includes(f));
-
-      const blocks = [];
-
-      blocks.push({ lines: ['scanning.'], hold: 800 });
-
-      // OS + chip
-      const osLines = [osStr.toLowerCase() + '.'];
-      if (chip) osLines.push(chip.toLowerCase() + '.');
-      else if (nvidia) osLines.push(nvidia.toLowerCase() + '.');
-      else if (gpu) osLines.push(gpu.substring(0, 40).toLowerCase() + '.');
-      osLines.push('premium device.');
-      blocks.push({ lines: osLines, hold: 1200 });
-
-      // expensive taste
-      blocks.push({ lines: ['someone invested in this.'], hold: 1000 });
-
-      // Form factor
-      const hasWebcam = media.videoinput > 0;
-      const hasMic = media.audioinput > 0;
-      if (hasWebcam && hasMic && d.maxTouchPoints === 0) {
-        if (profile.device.parsed.os === 'macOS') {
-          blocks.push({ lines: ['webcam. microphone. no touch.', '=macbook pro.'], hold: 1000 });
-        } else {
-          blocks.push({ lines: ['webcam. microphone. no touch.', '=laptop.'], hold: 1000 });
-        }
-      }
-
-      // Power user
-      blocks.push({ lines: ['power savvy,', '', '=power user?'], hold: 1500 });
-
-      // power user color
-      blocks.push({ lines: ['knows shortcuts.', 'skips tutorials.', 'reads documentation. for fun.'], hold: 1200 });
-
-      // Browser + tracking posture
-      const browserLines = [browserStr.toLowerCase() + '.'];
-      browserLines.push(d.cookieEnabled ? 'cookies: on.' : 'cookies: blocked.');
-      browserLines.push(d.doNotTrack === '1' ? 'do-not-track: on.' : 'no do-not-track.');
-      if (d.doNotTrack !== '1' && d.cookieEnabled) browserLines.push('no resistance.');
-      blocks.push({ lines: browserLines, hold: 1200 });
-
-      // false sense of security
-      blocks.push({ lines: ['thinks incognito means invisible.'], hold: 1200 });
-
-      // Hardware
-      const hwLines = [];
-      hwLines.push((d.hardwareConcurrency || '?') + ' cores. ' + (d.deviceMemory || '?') + 'GB RAM.');
-      hwLines.push(d.screenWidth + 'x' + d.screenHeight + ' @' + d.devicePixelRatio + 'x.');
-      if (d.colorDepth >= 30) hwLines.push(d.colorDepth + '-bit color. professional display.');
-      else if (d.devicePixelRatio >= 2) hwLines.push('retina display.');
-      else hwLines.push('standard display.');
-      blocks.push({ lines: hwLines, hold: 1200 });
-
-      // Battery
-      if (battery && battery.level !== undefined) {
-        const pct = Math.round(battery.level * 100);
-        const bl = [pct + '% battery.' + (battery.charging ? ' charging.' : '')];
-        bl.push(battery.charging ? 'plugged in at desk.' : 'on battery. mobile.');
-        blocks.push({ lines: bl, hold: 1000 });
-
-        // settled in
-        if (battery.charging) {
-          blocks.push({ lines: ['settled in.', 'not going anywhere.'], hold: 1000 });
-        }
-      }
-
-      // Time
       if (localHour !== null) {
-        const h = localHour;
-        const m = now.getMinutes();
-        const timeStr = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
-        let desc = '', inference = '';
-        if (h >= 22 || h < 6) { desc = 'late night.'; inference = 'working late. dedicated? insomniac?'; }
-        else if (h >= 6 && h < 9) { desc = 'early morning.'; inference = 'early riser. disciplined.'; }
-        else if (h >= 9 && h < 17) { desc = 'work hours.'; inference = 'browsing during work.'; }
-        else { desc = 'evening.'; inference = 'after work. leisure time.'; }
-        blocks.push({ lines: [timeStr + ' local time.', desc, inference].filter(Boolean), hold: 1100 });
-
-        // time-of-day exploitation
-        if (h >= 22 || h < 6) {
-          blocks.push({ lines: ['can\'t sleep? or won\'t sleep?', '', 'late night impulse buys', 'convert 40% better.', 'increase bid.'], hold: 1500 });
-        } else if (h >= 9 && h < 17) {
-          blocks.push({ lines: ['should be working.', 'distracted.', 'perfect for engagement ads.'], hold: 1200 });
-        } else if (h >= 17 && h < 22) {
-          blocks.push({ lines: ['tired. guard is down.', 'emotional purchases peak at 8pm.'], hold: 1200 });
+        const h = localHour, m = now.getMinutes();
+        const ts = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+        if (h >= 0 && h < 5) {
+          add([ts + ' local time.', 'deep night.'], 'normal');
+          add(['impulse control lowest between midnight and 4am.', 'increase bid.'], 'linger');
+        } else if (h >= 22 || h === 5) {
+          add([ts + ' local time.', 'late night.'], 'normal');
+          add(['can\'t sleep? or won\'t sleep?', 'late night purchases convert 40% better.'], 'linger');
+        } else if (h >= 6 && h < 9) {
+          add([ts + ' local time.', 'early session.'], 'normal');
+          add(['routine browser. habitual.', 'serve morning news. coffee ads.'], 'normal');
+        } else if (h >= 9 && h < 12) {
+          add([ts + ' local time.', 'morning. work hours.'], 'normal');
+          add(['should be working. procrastinating.', 'receptive to distractions.'], 'normal');
+        } else if (h >= 12 && h < 14) {
+          add([ts + ' local time.', 'lunch break.'], 'normal');
+          add(['browsing. shopping.', 'food delivery? retail?'], 'normal');
+        } else if (h >= 14 && h < 17) {
+          add([ts + ' local time.', 'afternoon slump.'], 'normal');
+          add(['attention fading. easier to convert.'], 'flash');
+        } else if (h >= 17 && h < 20) {
+          add([ts + ' local time.', 'evening.'], 'normal');
+          add(['decision fatigue setting in.', 'emotional purchases peak now.'], 'normal');
+        } else {
+          add([ts + ' local time.', 'late evening.'], 'normal');
+          add(['winding down. guard lowered.'], 'flash');
         }
       }
 
-      // Location
-      blocks.push({
-        lines: [
-          (d.timezone || 'unknown').toLowerCase() + '.',
-          loc.country.toLowerCase() + '.',
-          loc.market.toLowerCase() + ' market.',
-        ],
-        hold: 1000,
-      });
+      // 9. LOCATION
+      add([(d.timezone || 'unknown timezone').toLowerCase() + '.', loc.country.toLowerCase() + '.', loc.market.toLowerCase() + ' market.'], 'normal');
 
-      // Language anomaly
-      const langInForeign = d.language?.startsWith('en') && !['United States', 'United Kingdom', 'Canada', 'Australia'].includes(loc.country);
+      const langCode = (d.language || '').substring(0, 2).toLowerCase();
+      const langInForeign = langCode === 'en' && !['United States','United Kingdom','Canada','Australia','Ireland','New Zealand'].includes(loc.country);
+      const nonEnglishInEnglish = langCode !== 'en' && ['United States','United Kingdom','Canada','Australia'].includes(loc.country);
       if (langInForeign) {
-        blocks.push({
-          lines: [d.language.toLowerCase() + ' speaker', 'in ' + loc.country.toLowerCase() + '.', 'expat? digital nomad?'],
-          hold: 1300,
-        });
-
-        // expat exploitation
-        blocks.push({ lines: ['probably misses home.', 'show airline ads.'], hold: 1200 });
+        add(['english speaker in ' + loc.country.toLowerCase() + '.', 'expatriate? remote worker? digital nomad?'], 'normal');
+        add(['probably misses home.', 'show airline ads. relocation services.'], 'normal');
+      } else if (nonEnglishInEnglish) {
+        add([d.language.toLowerCase() + ' speaker in ' + loc.country.toLowerCase() + '.', 'immigrant? international student?'], 'normal');
+        add(['target with community services. language learning ads.'], 'normal');
       }
 
-      // Font forensics
-      if (devFonts.length > 0 || designFonts.length > 0) {
-        const fl = [];
-        if (devFonts.length > 0) { fl.push('fonts: ' + devFonts.join(', ').toLowerCase() + '.'); fl.push('=developer.'); }
-        if (designFonts.length > 0) { fl.push('fonts: ' + designFonts.slice(0, 3).join(', ').toLowerCase() + '.'); fl.push('=designer too.'); }
-        blocks.push({ lines: fl, hold: 1100 });
-
-        // rare combo
-        if (devFonts.length > 0 && designFonts.length > 0) {
-          blocks.push({ lines: ['builds things and makes them pretty.', 'rare combination.', 'charge more.'], hold: 1300 });
-        }
+      // 10. FONT FORENSICS
+      const designFonts = fonts.filter(f => ['Futura','Avenir','Avenir Next','Gill Sans','Helvetica Neue','Open Sans','Proxima Nova'].includes(f));
+      const devFonts = fonts.filter(f => ['Menlo','Monaco','Consolas','Fira Code','Source Code Pro','SF Mono'].includes(f));
+      if (devFonts.length > 0 && designFonts.length > 0) {
+        add(['developer fonts: ' + devFonts.slice(0,2).join(', ').toLowerCase() + '.', 'design fonts: ' + designFonts.slice(0,2).join(', ').toLowerCase() + '.'], 'normal');
+        add(['builds things AND makes them pretty.', 'rare combination. high value.'], 'normal');
+      } else if (devFonts.length > 0) {
+        add(['developer fonts detected.', devFonts.slice(0,3).join(', ').toLowerCase() + '.'], 'normal');
+        add(['writes code.'], 'flash');
+      } else if (designFonts.length > 0) {
+        add(['design fonts detected.', designFonts.slice(0,3).join(', ').toLowerCase() + '.'], 'normal');
+        add(['visual professional.'], 'flash');
+      } else if (fonts.length > 20) {
+        add([fonts.length + ' fonts installed.', 'above average. creative field?'], 'normal');
       }
 
-      // Profession
-      const allProf = profile.profession.all || [];
+      // 11. PROFESSION
+      const allProf = prof.all || [];
       if (allProf.length > 0) {
-        blocks.push({
-          lines: allProf.slice(0, 3).map(p => p.label.toLowerCase() + '. (' + Math.round(p.confidence * 100) + '%)'),
-          hold: 1000,
-        });
+        add(allProf.slice(0, 3).map(p => p.label.toLowerCase() + '. (' + Math.round(p.confidence * 100) + '%)'), 'normal');
       }
 
-      // Income
-      blocks.push({
-        lines: [inc.bracket.toLowerCase() + '.', 'est. ' + inc.estimate.toLowerCase() + '.', '', '=sell premium ads?'],
-        hold: 1500,
-      });
+      // 12. INCOME
+      if (inc.bracket === 'High' || inc.bracket === 'Upper-Middle') {
+        add([inc.bracket.toLowerCase() + ' income.', 'est. ' + inc.estimate.toLowerCase() + '.'], 'normal');
+        add(['premium ad inventory.', 'luxury brands. SaaS. investment products.'], 'normal');
+        add(['could afford to say no.', '', 'doesn\'t.'], 'linger');
+      } else if (inc.bracket === 'Middle') {
+        add(['middle income.', 'est. ' + inc.estimate.toLowerCase() + '.'], 'normal');
+        add(['volume target.', 'discount codes. subscription trials.'], 'normal');
+      } else {
+        add(['lower income bracket.', 'est. ' + inc.estimate.toLowerCase() + '.'], 'normal');
+        add(['cost-sensitive.', 'payday loan ads. buy-now-pay-later.'], 'normal');
+      }
 
-      // can afford to say no
-      blocks.push({ lines: ['could afford to say no.', '', 'doesn\'t.'], hold: 1500 });
+      // 13. CONNECTION
+      if (d.connectionType === '4g' && (d.connectionDownlink||0) > 5) {
+        add(['fast connection. ' + d.connectionDownlink + ' mbps.', 'serve rich media. video ads.'], 'normal');
+      } else if (d.connectionType === '3g' || d.connectionType === '2g') {
+        add(['slow connection. ' + d.connectionType + '.', 'text-only ads. lightweight creatives.'], 'normal');
+      }
 
-      // Entropy
-      blocks.push({
-        lines: [
-          entropy.totalBits.toFixed(1) + ' bits of entropy.',
-          'unique among ' + uniqueness.populationSize + '.',
-          uniqueness.percent + '% identifiable.',
-        ],
-        hold: 1200,
-      });
+      // 14. ENTROPY
+      const bits = entropy.totalBits;
+      if (bits > 50) {
+        add([bits.toFixed(1) + ' bits of entropy.', 'extremely unique.'], 'normal');
+        add(['identifiable among ' + uniqueness.populationSize + '.', uniqueness.percent + '%.'], 'normal');
+      } else if (bits > 30) {
+        add([bits.toFixed(1) + ' bits of entropy.', 'highly unique.'], 'normal');
+        add([uniqueness.percent + '% identifiable.'], 'flash');
+      } else if (bits > 15) {
+        add([bits.toFixed(1) + ' bits.', 'moderately unique.', 'combined with other signals: identifiable.'], 'normal');
+      } else {
+        add([bits.toFixed(1) + ' bits.', 'common profile. harder to single out.', 'but not impossible.'], 'normal');
+      }
 
-      // Fingerprint vectors
-      blocks.push({
-        lines: ['canvas: unique.', 'audio: unique.', 'GPU: unique.', 'every signal confirms:', 'one person.'],
-        hold: 1300,
-      });
+      add(['canvas: unique.', 'audio: unique.', 'GPU: unique.', 'every signal confirms: one subject.'], 'normal');
+      add(['needle in a haystack?', '', 'subject IS the needle.'], 'linger');
 
-      // needle
-      blocks.push({ lines: ['needle in a haystack?', '', 'you ARE the needle.'], hold: 1500 });
+      // 15. VALUATION
+      add(['$' + pricing.cpm.toFixed(2) + ' CPM.', '$' + pricing.annualValue.toFixed(0) + '/year.'], 'normal');
+      add(['less than a coffee.', 'but thousands of times a day.'], 'normal');
 
-      // Valuation
-      blocks.push({
-        lines: ['$' + pricing.cpm.toFixed(2) + ' CPM.', '$' + pricing.annualValue.toFixed(0) + '/year.'],
-        hold: 1000,
-      });
+      const factors = pricing.factors || [];
+      if (factors.length > 0) add(factors.slice(0, 4).map(f => f.label.toLowerCase() + ': ' + f.effect.toLowerCase() + '.'), 'normal');
 
-      // less than a coffee
-      blocks.push({ lines: ['less than a coffee.', 'but thousands of times a day.'], hold: 1300 });
-
-      // we gave you a name
-      blocks.push({ lines: ['we gave you a name.', 'you didn\'t choose it.'], hold: 1300 });
-
-      // Visitor ID
+      // 16. IDENTIFICATION
+      add(['subject fully profiled.'], 'flash');
+      add(['we gave it a name.', 'it didn\'t choose it.'], 'normal');
       const vid = fpData.advanced?.visitorId || 'unknown';
-      blocks.push({ lines: ['visitor ID:', vid], hold: 1200 });
+      add(['visitor ID:', vid], 'normal');
+      add(['collected in seconds.', 'no permission required.'], 'normal');
 
-      // Speed
-      blocks.push({ lines: ['collected in seconds.', 'no permission asked.'], hold: 1200 });
+      // 17. ENDING — switches to "you"
+      add(['classification:', 'advertising commodity.'], 'linger');
+      add(['filed. indexed. sold.', 'again and again and again.'], 'linger');
+      add(['you can close this tab.', '', 'we already have what we need.'], 'linger');
+      add(['you are the product.'], 'linger');
 
-      // Classification
-      blocks.push({ lines: ['classification:', 'advertising commodity.'], hold: 1500 });
+      // Apply scared timing
+      srand(vid.split('').reduce((a, c) => a + c.charCodeAt(0), 1));
+      for (let i = 0; i < raw.length; i++) {
+        raw[i].hold = scaredTiming(i, raw.length, raw[i].lines.length, raw[i].importance);
+      }
 
-      // filed
-      blocks.push({ lines: ['filed. indexed. sold.', 'again and again and again.'], hold: 1500 });
+      return raw;
+    }
 
-      // close the tab
-      blocks.push({ lines: ['you can close this tab.', '', 'we already have what we need.'], hold: 2000 });
-
-      // Final
-      blocks.push({ lines: ['you are the product.'], hold: 3000 });
-
-      return blocks;
+    // ---- Load GitHub repos ----
+    async function loadRepos() {
+      try {
+        const resp = await fetch('https://api.github.com/users/Themolx/repos?sort=updated&per_page=20');
+        const repos = await resp.json();
+        const container = document.getElementById('repos');
+        repos.filter(r => !r.fork && r.name !== '.github').slice(0, 12).forEach(r => {
+          const a = document.createElement('a');
+          a.href = r.html_url;
+          a.target = '_blank';
+          a.textContent = r.name.toLowerCase();
+          container.appendChild(a);
+        });
+      } catch(e) {}
     }
 
     // ---- Run ----
@@ -552,8 +683,8 @@
     // Show scanning immediately
     await showBlock(['scanning.'], 600);
 
-    // Collect data in background
-    const fpData = await collectData();
+    // Collect data + load repos in parallel
+    const [fpData] = await Promise.all([collectData(), loadRepos()]);
 
     // Process
     const profile = InferenceEngine.generateFullProfile(fpData);
@@ -580,6 +711,9 @@
     stage.appendChild(finalDiv);
     requestAnimationFrame(() => finalDiv.classList.add('visible'));
     hint.style.opacity = '0';
+
+    // Show footer with repos
+    document.getElementById('footer').style.display = 'block';
 
   })();
   </script>
