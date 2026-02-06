@@ -45,9 +45,7 @@
       opacity: 0;
       transform: translateY(6px);
       transition: opacity 0.3s ease-out, transform 0.3s ease-out;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      word-break: break-word;
     }
 
     .line.visible {
@@ -94,36 +92,21 @@
       transition: opacity 0.5s;
     }
 
-    #footer {
-      display: none;
-      position: fixed;
-      bottom: 30px;
-      left: 80px;
-      right: 80px;
-      font-size: 11px;
-      color: #222;
-      font-weight: 400;
-      font-family: var(--font);
-      letter-spacing: 0.5px;
-    }
-    #footer a { color: #333; text-decoration: none; }
-    #footer a:hover { color: #fff; }
-    #footer .repos { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 6px; }
 
     @media (max-width: 768px) {
-      #stage { padding: 40px 30px; }
-      #hint { left: 30px; bottom: 20px; }
-      #footer { left: 30px; right: 30px; }
+      #stage { padding: 30px 20px; }
+      #hint { left: 20px; bottom: 16px; font-size: 11px; }
+    }
+
+    @media (max-width: 480px) {
+      #stage { padding: 24px 16px; }
+      #hint { left: 16px; bottom: 12px; }
     }
   </style>
 </head>
 <body>
   <div id="stage"></div>
   <div id="hint">press space to skip</div>
-  <div id="footer">
-    <div>Themolx</div>
-    <div class="repos" id="repos"></div>
-  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
   <script src="shared/inference-engine.js"></script>
@@ -222,10 +205,11 @@
       stage.classList.remove('fade-out');
       stage.innerHTML = '';
 
-      const maxW = window.innerWidth - 160;
-      const isMobile = window.innerWidth < 768;
-      const maxFont = isMobile ? 60 : 120;
-      const minFont = isMobile ? 24 : 32;
+      const vw = window.innerWidth;
+      const padX = vw < 480 ? 32 : vw < 768 ? 40 : 160;
+      const maxW = vw - padX;
+      const maxFont = vw < 480 ? 42 : vw < 768 ? 56 : 120;
+      const minFont = vw < 480 ? 18 : vw < 768 ? 22 : 28;
 
       const els = [];
       for (const text of lines) {
@@ -707,21 +691,6 @@
       return raw;
     }
 
-    // ---- Load GitHub repos ----
-    async function loadRepos() {
-      try {
-        const resp = await fetch('https://api.github.com/users/Themolx/repos?sort=updated&per_page=20');
-        const repos = await resp.json();
-        const container = document.getElementById('repos');
-        repos.filter(r => !r.fork && r.name !== '.github').slice(0, 12).forEach(r => {
-          const a = document.createElement('a');
-          a.href = r.html_url;
-          a.target = '_blank';
-          a.textContent = r.name.toLowerCase();
-          container.appendChild(a);
-        });
-      } catch(e) {}
-    }
 
     // ---- Run ----
 
@@ -734,8 +703,7 @@
 
     await showBlock(['!scanning.'], 600);
 
-    // Collect data + load repos in parallel
-    const [fpData] = await Promise.all([collectData(), loadRepos()]);
+    const fpData = await collectData();
 
     // Process
     const profile = InferenceEngine.generateFullProfile(fpData);
@@ -756,16 +724,16 @@
     stage.innerHTML = '';
     const finalDiv = document.createElement('div');
     finalDiv.classList.add('line', 'bold');
-    const sz = fitSize('you are the product.', window.innerWidth - 160, window.innerWidth < 768 ? 60 : 120, 32, 'bold');
+    const fvw = window.innerWidth;
+    const fMaxFont = fvw < 480 ? 42 : fvw < 768 ? 56 : 120;
+    const fPad = fvw < 480 ? 32 : fvw < 768 ? 40 : 160;
+    const sz = fitSize('you are the product.', fvw - fPad, fMaxFont, 24, 'bold');
     finalDiv.style.fontSize = sz + 'px';
     finalDiv.textContent = 'you are the product.';
     stage.appendChild(finalDiv);
     requestAnimationFrame(() => finalDiv.classList.add('visible'));
     hint.style.opacity = '0';
     stopDrone();
-
-    // Show footer with repos
-    document.getElementById('footer').style.display = 'block';
 
   })();
   </script>
