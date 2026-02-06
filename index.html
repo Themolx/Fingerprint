@@ -81,32 +81,18 @@
       50% { opacity: 0; }
     }
 
-    #hint {
-      position: fixed;
-      bottom: 30px;
-      left: 80px;
-      font-size: 12px;
-      color: #333;
-      font-weight: 400;
-      font-family: var(--font);
-      transition: opacity 0.5s;
-    }
-
 
     @media (max-width: 768px) {
       #stage { padding: 30px 20px; }
-      #hint { left: 20px; bottom: 16px; font-size: 11px; }
     }
 
     @media (max-width: 480px) {
       #stage { padding: 24px 16px; }
-      #hint { left: 16px; bottom: 12px; }
     }
   </style>
 </head>
 <body>
   <div id="stage"></div>
-  <div id="hint">press space to skip</div>
 
   <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js"></script>
   <script src="shared/inference-engine.js"></script>
@@ -116,7 +102,6 @@
   <script>
   (async () => {
     const stage = document.getElementById('stage');
-    const hint = document.getElementById('hint');
     let skipRequested = false;
     let currentResolve = null;
 
@@ -131,6 +116,28 @@
       skipRequested = true;
       if (currentResolve) currentResolve();
     });
+
+    // ---- Ad blocker detection ----
+    async function detectAdBlocker() {
+      try {
+        const testAd = document.createElement('div');
+        testAd.innerHTML = '&nbsp;';
+        testAd.className = 'adsbox ad-placement ad-banner textad banner_ad';
+        testAd.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;';
+        document.body.appendChild(testAd);
+        await new Promise(r => setTimeout(r, 100));
+        const blocked = testAd.offsetHeight === 0 || testAd.clientHeight === 0;
+        document.body.removeChild(testAd);
+        if (blocked) return true;
+        // Also try fetching a known ad script URL
+        try {
+          await fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js', { method: 'HEAD', mode: 'no-cors', cache: 'no-store' });
+          return false;
+        } catch(e) {
+          return true;
+        }
+      } catch(e) { return false; }
+    }
 
     function wait(ms) {
       if (skipRequested) { skipRequested = false; return Promise.resolve(); }
@@ -376,6 +383,9 @@
         ctx.close();
       } catch(e) {}
 
+      // Ad blocker
+      const adBlocker = await detectAdBlocker();
+
       return {
         basic,
         advanced,
@@ -385,6 +395,7 @@
         fonts,
         battery,
         mediaDevices,
+        adBlocker,
         collectedAt: new Date().toISOString(),
       };
     }
@@ -404,6 +415,7 @@
       const fonts = fpData.fonts || [];
       const battery = fpData.battery || {};
       const media = fpData.mediaDevices || {};
+      const hasAdBlocker = fpData.adBlocker === true;
 
       const dev = profile.device;
       const loc = profile.location;
@@ -520,6 +532,19 @@
         }
       } else {
         add([dev.parsed.browser.toLowerCase() + ' ' + dev.parsed.browserVersion + '.'], 'normal');
+      }
+
+      // 5b. AD BLOCKER
+      if (hasAdBlocker) {
+        add(['ad blocker detected.'], 'normal');
+        add(['!blocks ads. not fingerprints.', '!the tracking continues underneath.'], 'linger');
+        if (isBrave || hasDNT) {
+          add(['!privacy tools stacked.', '!subject is aware. or paranoid.'], 'normal');
+          add(['!makes the profile more distinctive. not less.'], 'flash');
+        }
+      } else {
+        add(['no ad blocker.'], 'flash');
+        add(['!fully exposed. every ad network sees this device.'], 'normal');
       }
 
       // 6. HARDWARE
@@ -732,8 +757,7 @@
     finalDiv.textContent = 'you are the product.';
     stage.appendChild(finalDiv);
     requestAnimationFrame(() => finalDiv.classList.add('visible'));
-    hint.style.opacity = '0';
-    stopDrone();
+    // drone continues — the surveillance doesn't stop
 
   })();
   </script>
